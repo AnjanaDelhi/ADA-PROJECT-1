@@ -1,0 +1,285 @@
+---
+title: "Predictors and risk factors for suicide among patients with breast cancer in United States"
+authors: Anjana Delhi and Esha Sharma
+output: html_notebook
+---
+
+## Loading the libraries and the datset
+```{r warning=FALSE}
+#Installing packages if needed. 
+#install.packages("readxl") # for reading excel files
+#install.packages("survival") #for survival analysis by group
+#install.packages("ggfortify") #for survival analysis by group
+#install.packages("survminer") #for pairwise diffs
+#install.packages("tidyverse") #for plotting KM curve
+#install.packages("ggplot2") #for plotting KM curve
+
+library(readxl) # for reading in excel file
+data <- read_excel("Breast_ADA_6TH (1).xlsx") #load data 
+library(survminer)#for pairwise diffs
+library(survival) #for calculating KM values
+library(ggfortify) #for KM curves
+library(ggplot2) # for plotting KM curve
+library(tidyverse) # for various packages
+```
+
+## Renaming the variables 
+```{r}
+##rename variables
+names(data)<-c("id", "age", "race", "sex", "primary_site", "death_classification", "death", "survivalm","insurance", "Marital", "age_diagnosis", "stage", "cod") 
+##Look at the variables class with the head function. (look under the variable heading to see the class).
+head(data)
+```
+
+## Recoding COD variable
+```{r warning=FALSE}
+# suicide and self-inflicted injury is coded as 1 (as the event) and alive individuals and deaths due to other causes are coded as 0. 
+data$cod_binary[
+  data$cod =="Suicide and Self-Inflicted Injury"]<-1 
+data$cod_binary[
+  data$cod!="Suicide and Self-Inflicted Injury"]<-0
+data$cod_binary<-factor(data$cod_binary,
+  levels = c(0,1),
+  labels = c("No event", "Event"))
+
+# Displaying the new COD variable 
+table(data$cod_binary)
+```
+
+
+## Recoding the stage variable 
+```{r}
+# Displaying the stages 
+table(data$stage)
+
+# Recoding the stages 
+data$stage_n[
+  data$stage =="0"]<-0
+data$stage_n[
+  data$stage =="I"]<-1
+data$stage_n[
+  data$stage =="IIA"|
+    data$stage =="IIB"] <-2
+data$stage_n[
+  data$stage =="IIIA"|
+    data$stage =="IIIB"|
+    data$stage =="IIIC"|
+    data$stage =="IIINOS"]<-3
+data$stage_n[
+  data$stage =="IV"]<-4
+data$stage_n[
+  data$stage =="UNK Stage"]<-5
+data$stage_n<-factor(data$stage_n,
+                     levels = c(0,1,2,3,4,5),
+                     labels = c("Stage 0", "Stage 1", "Stage 2", "Stage 3", "Stage 4", "Stage Unknown"))
+
+# Displaying the new stages 
+table(data$stage_n)
+```
+
+## Recoding the marital status variable 
+```{r}
+# displaying the different marital categories 
+table(data$Marital)
+
+# Recoding the variable 
+data$marital_n[
+  data$Marital =="Single (never married)"|
+    data$Marital =="Unmarried or Domestic Partner"] <-1
+data$marital_n[
+  data$Marital =="Married (including common law)"] <-2
+data$marital_n[
+  data$Marital =="Divorced"] <-3
+data$marital_n[
+  data$Marital =="Separated"] <-4
+data$marital_n[
+  data$Marital =="Widowed"] <-5
+data$marital_n[
+  data$Marital =="Unknown"] <-6
+data$marital_n<-factor(data$marital_n,
+                     levels = c(1,2,3,4,5,6),
+                     labels = c("Single/Unmarried", "Married", "Divorced", "Separated", "Widowed", "Unknown"))
+
+# displaying the new marital status categories 
+table(data$marital_n)
+
+```
+
+## Recoding the age group variable 
+```{r}
+# Displaying the different age groups in the data
+table(data$age)
+
+# Recoding the variable 
+data$age_n[
+  data$age =="40-44 years"|
+    data$age =="45-49 years"] <-1
+data$age_n[
+  data$age =="50-54 years"|
+    data$age =="55-59 years"] <-2
+data$age_n[
+  data$age =="60-64 years"|
+    data$age =="65-69 years"] <-3
+data$age_n[
+  data$age =="70-74 years"|
+    data$age =="75-79 years"] <-4
+data$age_n[
+  data$age =="80-84 years"|
+    data$age ==" 85+ years"] <-5
+
+data$age_n<-factor(data$age_n,
+                       levels = c(1,2,3,4,5),
+                       labels = c("40-49", "50-59", "60-69", "70-79", "80 and above"))
+
+# Displaying the new categories 
+table(data$age_n)
+```
+## Removing the NAs from age so that only those 40 years or older are in the study 
+```{r}
+data2 <- data[!(is.na(data$age_n)),]
+table(data2$age_n)
+```
+## Recoding the insurance status variable 
+```{r warning=FALSE}
+#Recode insurance status as a factor variable and label it
+data$insurance_n[
+  data$insurance=="Insured"]<-1
+data$insurance_n[
+  data$insurance=="Insured/No specifics"]<-2
+data$insurance_n[
+  data$insurance=="Any Medicaid"]<-3
+data$insurance_n[
+  data$insurance=="Uninsured"]<-4
+data$insurance_n[
+  data$insurance=="Insurance status unknown"]<-5
+data$insurance_n<-factor(data$insurance_n,
+                           levels = c(1,2,3,4,5),
+                           labels = c("Insured", "Insured/No specifics", "Any Medicaid", "Uninsured", "Unknown"))
+
+# Displaying the new insurance variable categories 
+table(data$insurance_n)
+```
+
+## Removing the NAs from survival months 
+```{r}
+data2 <- data2[!(is.na(data2$survivalm)),]
+table(data2$cod_binary)
+```
+
+## Excluding observations with survival months more than 60 months
+```{r}
+data1 <- subset(data2, survivalm < 61 & stage_n!= "Stage 0",
+               
+               select=id:insurance_n)
+```
+## Descriptives of the dataset
+
+### Survival Months 
+```{r}
+# Mean and SD of survival months by event
+by(data1$survivalm,data1$cod_binary,mean)
+by(data1$survivalm,data1$cod_binary,sd)
+
+# Plotting the histogram to display the distribution of the survival months 
+hist(data1$survivalm)
+
+# As the distribution is not normal, we will run the nonparametric test to find the difference between the means of the groups 
+wilcox.test(data1$survivalm~data1$cod_binary)
+```
+
+### Age at disgnois of Breast Cancer 
+```{r}
+# Mean and SD of Age at diagnosis by event
+by(data1$age_diagnosis,data1$cod_binary,mean)
+by(data1$age_diagnosis,data1$cod_binary,sd)
+
+# Plotting the histogram to see the distribution of age at diagnosis 
+hist(data1$age_diagnosis)
+
+# The distribution is normally distributed, hence we ran a t-test
+t.test(data1$age_diagnosis~data1$cod_binary)
+```
+
+### Descriptives and cross tabs for marital status and event
+```{r}
+attach(data1)
+mytable <- table(data1$marital_n, data1$cod_binary) # A will be rows, B will be columns 
+mytable # print table 
+
+prop.table(mytable, 1) # row percentages 
+prop.table(mytable, 2) # column percentages (we need this for table 1)
+```
+
+### Cross tabs for insurance and event
+```{r warning=FALSE}
+attach(data1)
+mytable_i <- table(data1$insurance_n, data1$cod_binary) # A will be rows, B will be columns 
+mytable_i # print table
+prop.table(mytable_i, 1) # row percentages
+prop.table(mytable_i, 2) # column percentages 
+```
+
+### Cross tabs for stage and event
+```{r}
+attach(data1)
+mytable_stage <- table(data1$stage_n,data1$cod_binary) # A will be rows, B will be columns 
+mytable_stage # print table
+prop.table(mytable_stage, 1) # row percentages 
+prop.table(mytable_stage, 2) # column percentages 
+```
+
+### Cross tabs for race and event
+```{r}
+attach(data1)
+mytable_race <- table(data1$race, data1$cod_binary) # A will be rows, B will be columns 
+mytable_race # print table
+prop.table(mytable_race, 1) # row percentages 
+prop.table(mytable_race, 2) # column percentages 
+```
+
+
+## Survival tables (KM analysis)
+```{r}
+data.surv2 <- survfit(Surv(survivalm, cod_binary) ~ stage_n, data1) #calculates KM survivor function values for plotting
+summary(data.surv2) #get KM values
+
+```
+
+## Plotting the KM curves 
+```{r}
+autoplot(data.surv2) + labs(x="Survival months", y="Proportion Surviving", title="KM survival plots for suicide among breast cancer patients by Stage") #using ggfortify library to calculate fancy KM plots with confidence intervals
+```
+
+## Log Rank test
+```{r}
+survdiff(Surv(survivalm, cod_binary) ~ stage_n,data=data1)
+pairwise_survdiff(Surv(survivalm, cod_binary) ~ stage_n,data=data1)
+```
+
+## Relevel the stage variable to change the reference to Stage 1
+```{r}
+table(data1$stage_n, data1$cod_binary)
+stage_n_re <-relevel(data1$stage_n, ref= "Stage 1")
+table(data1$stage_n_re)
+```
+
+## Cox proportional regression model (unadjusted)
+```{r}
+stage.mod1<-coxph(Surv(survivalm, cod_binary)~stage_n_re, data1, ties="breslow")
+summary(stage.mod1)
+```
+
+##Cox proportional regression model (adjusted)
+```{r}
+stage.mod.adj1<-coxph(Surv(survivalm, cod_binary)~stage_n_re + race + marital_n + age_n + age_diagnosis, data1, ties="breslow")
+
+# displaying the summary of results 
+summary(stage.mod.adj1)
+```
+## Testing for effect measure modification by including an interaction term in the model with race between stage of cancer and survival to see if there is effect modification of the hazard of suicide by race. 
+```{r}
+race_int.mod<-coxph(Surv(survivalm, cod_binary)~stage_n_re + race + stage_n_re*race + marital_n + age_n + age_diagnosis, data1, ties="breslow")
+summary(race_int.mod)
+
+#Interpretation: 
+```
